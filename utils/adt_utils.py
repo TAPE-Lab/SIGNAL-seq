@@ -9,7 +9,7 @@ import pandas as pd
 import scanpy as sc
 import scprep 
 
-# Perform EMD on all cells as global control
+# Perform EMD on specifed control condition
 def calculate_emd(emd_data, control_obs, control_condition):
 
     # Generate condition list
