@@ -1,0 +1,475 @@
+---
+title: "Opzoomer et al. Figre 1"
+author: "james_opzoomer"
+date: "31/03/2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(reshape2)
+library(ggridges)
+```
+
+# Figure 1 panes for Opzoomer et al. 2024
+## Load data
+
+```{r load ptm data}
+
+# plotting Colours 
+sample_cols <- c('#A6251D', '#4F973C', '#25347B')
+
+# Load the adt data
+protein_obsm <- read_csv("../02_preprocessing_multimodal/ptm_data_clr.csv")
+```
+
+```{r clean ptm data}
+# Clean the column names
+
+# Select markers 
+select <- c('CD44_v4', 'pP120-Catenin_[T310]',
+       'pRB_[S807/811]_v1', 'me2_Histone_H3_[K4]', 'cCaspase_3_[D175]_v2',
+       'pPDPK1_[S241]', 'pMKK4/SEK1_[S257]',
+       'pBTK_[Y551]_1_v2', 'p4E-BP1_[T37/46]_v2', 'pAKT_[T308]',
+       'pNF-κB_p65_[S529]', 'pP38_MAPK_[T180/Y182]_v2',
+        'pS6_[S240/S244]_2', 'CK18', 'Cyclin_B1_2', 'pNDRG1_[T346]')
+
+cnames <- colnames(protein_obsm)
+
+cnames_clean <- gsub("/", "_", cnames)
+cnames_clean <- gsub("-", "_", cnames_clean)
+cnames_clean <- gsub("\\[", "", cnames_clean)
+cnames_clean <- gsub("\\]", "", cnames_clean)
+
+
+colnames(protein_obsm) <- cnames_clean
+
+
+select_clean <- gsub("/", "_", select)
+select_clean <- gsub("-", "_", select_clean)
+select_clean <- gsub("\\[", "", select_clean)
+select <- gsub("\\]", "", select_clean)
+
+```
+
+```{r}
+
+# subset the markers
+ptm_markers <- protein_obsm %>% select(-barcode)
+
+```
+
+```{r}
+
+# Melt data for plotting
+p_df_melt <- melt(ptm_markers)
+colnames(p_df_melt) <- c("sample_id", "antigen", "CLR_detection")
+
+```
+
+
+```{r}
+
+# Extract pS6 data
+s6_ash_df <- p_df_melt %>% filter(antigen == "pS6_S240_S244_2") 
+s6_iso_df <- s6_ash_df
+
+myorder <- c("Control", "EGF IGF1", "GFs MEKi PI3Ki")
+s6_iso_df <- s6_iso_df %>% 
+  mutate(sample_id = factor(sample_id, levels = rev(myorder)))
+
+
+# Display a facet_grid pS6
+s6_densities <- s6_iso_df %>% 
+                group_by(sample_id) %>%
+                group_modify(~ ggplot2:::compute_density(.x$CLR_detection, NULL)) %>%
+                select(sample_id,
+                       CLR_detection = x,
+                       scaled
+                       )
+
+s6_densities
+
+
+ggridge_ps6_2 <- ggplot(s6_densities, aes(x=CLR_detection, y=sample_id, height = scaled, fill=sample_id))  +
+  ggridges::geom_density_ridges2(stat = "identity", scale = 1.2) +
+  theme_classic() +
+  scale_fill_manual(values = sample_cols) +
+  xlim(c(-0.8, 7.6)) +
+  theme(legend.position = "none", text = element_text(size = 12),
+        axis.text.y=element_blank(),
+        axis.title.y=element_blank(),
+        axis.title.x=element_blank()) +
+  scale_y_discrete(expand = expand_scale(add = c(0.2, 1.5)))
+
+ggridge_ps6_2
+
+ggsave(filename = "figure_1/ridgeplot_adt_ps6.pdf", plot = ggridge_ps6_2, height = 3, width = 2)
+
+
+```
+
+
+```{r}
+
+# Filter on caspase
+cc3_ash_df <- p_df_melt %>% filter(antigen == "cCaspase_3_D175_v2")
+cc3_iso_df <- cc3_ash_df
+
+myorder <- c("Control", "EGF IGF1", "GFs MEKi PI3Ki")
+cc3_iso_df <- cc3_iso_df %>% 
+  mutate(sample_id = factor(sample_id, levels = rev(myorder)))
+
+# Display a facet_grid cCasp3 and pS6
+cc3_densities <-  cc3_iso_df %>% 
+                group_by(sample_id) %>%
+                group_modify(~ ggplot2:::compute_density(.x$CLR_detection, NULL)) %>%
+                select(sample_id,
+                       CLR_detection = x,
+                       scaled
+                       )
+
+cc3_densities
+
+
+violin_cc3 <- ggplot(cc3_densities, aes(x=CLR_detection, y=sample_id, height = scaled, fill=sample_id))  +
+  ggridges::geom_density_ridges2(stat = "identity", scale = 1.2) +
+  theme_classic() +
+  scale_fill_manual(values = sample_cols) +
+  xlim(c(-0.5, 3)) +
+  theme(legend.position = "none", text = element_text(size = 12),
+        axis.text.y=element_blank(),
+        axis.title.y=element_blank(),
+        axis.title.x=element_blank())  +
+        scale_y_discrete(expand = expand_scale(add = c(0.2, 1.5)))
+
+violin_cc3
+
+ggsave(filename = "figure_1/ridgeplot_adt_cc3.pdf", plot = violin_cc3, height = 3, width = 2.5)
+
+
+```
+
+## Label cCasp3-high and cCasp3-low cells 
+
+```{r}
+
+# Show cCasp3 with filtering line
+clr_cCasp3_thresh <- 0.6
+
+casp3_clr_df <- p_df_melt %>% filter(antigen == 'cCaspase_3_D175_v2')
+
+gp_casp_hist <-ggplot(casp3_clr_df, aes(x=CLR_detection, y=..scaled.., color=sample_id)) +
+                      geom_density(alpha=0.8) + geom_vline(xintercept=clr_cCasp3_thresh, linetype=2) +
+                      theme_classic() + xlim(-1,5) +
+                      scale_color_manual(values = rev(sample_cols))
+  
+gp_casp_hist
+
+ggsave("figure_S1/cCasp3_clr_expression.pdf", width = 5, height = 3)
+
+```
+
+```{r}
+
+# Generate the cCasp3 thesholds
+casp_low_df <- protein_obsm %>% filter(`cCaspase_3_D175_v2` < clr_cCasp3_thresh)
+casp_high_df <- protein_obsm %>% filter(`cCaspase_3_D175_v2` > clr_cCasp3_thresh)
+casp_low_df_plot <- casp_low_df %>% select(-barcode)
+p_df_melt <- melt(casp_low_df_plot)
+
+```
+
+
+```{r}
+# Merge data row-wise
+casp_high_df$casp3_status <- rep('cCasp3 High', nrow(casp_high_df))
+casp_low_df$casp3_status <- rep('cCasp3 low', nrow(casp_low_df))
+annotated_cCasp_status <- rbind(casp_low_df, casp_high_df)
+
+```
+
+
+```{r adt violins}
+
+# Log-10 transform data
+annotated_cCasp_status$plog10_total_counts <- log10(1+annotated_cCasp_status$total_counts)
+
+# Violin plot
+# Change color by groups
+gg_vio_umi <- ggplot(annotated_cCasp_status, aes(x=sample_id, y=plog10_total_counts, fill=sample_id)) + 
+  geom_violin(trim=FALSE, colour="black") +
+  labs(x="sample_id", y = "Log10(1 + ADT_UMI)") +
+  scale_fill_manual(values = rev(sample_cols)) + theme_classic() +
+  theme(axis.text = element_text(size=14))
+        
+gg_vio_umi + facet_wrap(~casp3_status)
+
+ggsave("figure_S1/ex0003_violin_casp3_ADT_UMI.pdf", width = 6, height = 4, dpi=800)
+```
+
+```{r}
+
+# load the RNA modality data
+mrna_obsms <- read_csv("../02_preprocessing_multimodal/ex0003_mrna_obsm_data.csv")
+
+colnames(mrna_obsms)[1] <- "barcode"
+
+```
+
+```{r}
+
+# Log-10 transform the data
+mrna_obsms$plog10_total_counts <- log10(1+mrna_obsms$total_counts)
+
+
+# Map the two dfs by barcode
+combined_obsm_df <- left_join(annotated_cCasp_status, mrna_obsms, by=c('barcode')) 
+
+# Violin plot
+gg_vio_umi <- ggplot(combined_obsm_df, aes(x=sample_id.x, y= plog10_total_counts.y , fill=sample_id.x)) + 
+  geom_violin(trim=FALSE, color="black") +
+  labs(x="sample_id", y = "Log10(1 + RNA_UMI)") +
+  scale_fill_manual(values = rev(sample_cols)) + theme_classic() +
+  theme(axis.text = element_text(size=14))
+
+gg_vio_umi + facet_wrap(~casp3_status)
+
+ggsave("figure_S1/ex0003_violin_casp3_RNAUMI.pdf", width = 6, height = 4, dpi=800)
+
+
+combined_obsm_df %>% group_by(casp3_status) %>% summarise(median(total_counts.y))
+
+
+```
+
+
+```{r}
+
+# Log10(1+ detected genes RNA modality)
+combined_obsm_df$plog10_genes_detected <- log10(1 + combined_obsm_df$n_genes_by_counts)
+
+
+# Violin plot
+# Change color by groups
+gg_vio_genes <- ggplot(combined_obsm_df, aes(x=sample_id.x, y=plog10_genes_detected, fill=sample_id.x)) + 
+  geom_violin(trim=FALSE, colour="black") +
+  labs(x="sample_id", y = "Log10(1 + Detected Genes)") +
+  scale_fill_manual(values = rev(sample_cols)) + theme_classic() +
+  theme(axis.text = element_text(size=14))
+
+gg_vio_genes + facet_wrap(~casp3_status)
+
+ggsave("figure_1/ex0003_violin_casp3_genes.pdf", width = 6, height = 4, dpi=800)
+
+combined_obsm_df %>% group_by(casp3_status, sample_id.x) %>% summarise(median(n_genes_by_counts))
+
+```
+
+```{r}
+# Cell phase and pRB association
+# Filter out the inhibitor conditions
+combined_obsm_df_control <- combined_obsm_df %>% filter(sample_id.y %in% c("Control", "EGF IGF1")) %>% 
+                            filter(casp3_status == "cCasp3 low")
+
+combined_obsm_df_control$phase <- factor(combined_obsm_df_control$phase, levels=c("G1", "S", "G2M"))
+
+# Change color by groups
+gg_vio_umi <- ggplot(combined_obsm_df_control, aes(x=phase, y=pRB_S807_811_v1, fill=phase)) + 
+  geom_violin(trim=FALSE, alpha=0.6) +
+  geom_boxplot(width=0.1, outlier.shape = NA) + 
+  labs(x="Cell Cycle", y = "pRB_S807_811_v1") +
+  scale_fill_manual(values = brewer.pal(3, "Blues")) + theme_classic() +
+  theme(axis.text = element_text(size=14))
+
+gg_vio_umi
+
+ggsave("figure_S1/ex0003_violin_phase_pRB_control.pdf", width = 6, height = 4, dpi=800)
+
+```
+
+
+```{r}
+# Pairwise test
+pairwise.t.test(combined_obsm_df_control$pRB_S807_811_v1, combined_obsm_df_control$phase)
+```
+
+
+```{r}
+
+# Load the polyA Random hex count data
+rt_id_counts <- read_csv("data/rt_bc_id_umi.csv")
+
+# Drop the rt well
+rt_id_counts <- rt_id_counts %>%  select(-rt_well)
+query <- combined_obsm_df$well_indexes
+
+# Filter dataframe based on whether 'well_id' column contains values in query vector
+filtered_df_rt <- rt_id_counts[rt_id_counts$well_pos %in% query,]
+colnames(filtered_df_rt) <- c("well_indexes", "PolyA", "Rand_hex")
+                  
+# left join the rt_counts
+rt_all_obsm_df <- left_join(combined_obsm_df, filtered_df_rt, by=c('well_indexes'))
+
+```
+
+
+```{r}
+
+# Subset data to relevant cols
+rt_casp_df <- rt_all_obsm_df %>% select(sample_id.x, casp3_status, cCaspase_3_D175_v2, PolyA, Rand_hex)
+
+# Create proportions
+# Calculate sums
+rowsums <- rt_casp_df %>% select(PolyA, Rand_hex) %>%  apply( 1, sum)
+
+# Calculate proportion of each row relative to the sum
+rt_casp_df$polyA_prop <- rt_casp_df$PolyA / rowsums
+
+```
+
+
+```{r}
+
+# Change color by groups
+gg_vio_umi <- ggplot(rt_casp_df, aes(x=casp3_status, y=polyA_prop, fill=casp3_status)) + 
+  geom_violin(trim=FALSE, alpha=0.6) +
+  geom_boxplot(width=0.1, outlier.shape = NA) + 
+  labs(x="casp3_status", y = "Fraction UMIs in cell RT PolyA") +
+  scale_fill_manual(values = c("purple", "gold")) + theme_classic() +
+  theme(axis.text = element_text(size=14))
+
+gg_vio_umi + facet_wrap(~sample_id.x)
+
+ggsave("figure_1/ex0003_violin_sample_id_polyA_frac.pdf", width = 6, height = 4, dpi=800)
+
+```
+
+
+```{r}
+
+# Group by column 1 (group)
+grouped_df <- split(rt_casp_df, rt_casp_df$sample_id.x)
+
+# Perform pairwise t-tests between categories in column 2 (category) across numbers in column 3 (value)
+for (i in seq_along(grouped_df)) {
+  print("Testing")
+  print(names(grouped_df[i]))
+  print(t.test(polyA_prop ~ casp3_status, data = grouped_df[[i]]))
+}
+
+```
+
+```{r}
+
+# Comparing caspase3
+combined_obsm_df_casp3 <-   combined_obsm_df %>%  
+                            select(sample_id.x, cCaspase_3_D175_v2, CASP3)
+
+ggplot(combined_obsm_df_casp3, aes(sample_id.x, CASP3, fill=sample_id.x)) +
+  geom_violin(trim=FALSE, colour="black") +
+  labs(x="sample_id", y = "ADT CLR detection") +
+  scale_fill_manual(values = rev(sample_cols)) + theme_classic() +
+  theme(axis.text = element_text(size=14))
+
+ggsave("figure_s1/ex0003_casp3_rna_violin.pdf", width = 6, height = 4, dpi=800)
+
+ggplot(combined_obsm_df_casp3, aes(sample_id.x, cCaspase_3_D175_v2, fill=sample_id.x)) +
+  geom_violin(trim=FALSE, colour="black") +
+  labs(x="sample_id", y = "ADT CLR detection") +
+  scale_fill_manual(values = rev(sample_cols)) + theme_classic() +
+  theme(axis.text = element_text(size=14))
+
+ggsave("figure_s1/ex0003_casp3_adt_violin.pdf", width = 6, height = 4, dpi=800)
+
+```
+
+```{r}
+
+# Comparing pS6 in cCasp3 low cells
+combined_obsm_df_rp6 <-   combined_obsm_df %>%  
+                            filter(casp3_status == "cCasp3 low") %>% 
+                            select(sample_id.x, pS6_S240_S244_2, RPS6)
+
+ggplot(combined_obsm_df_rp6, aes(sample_id.x, RPS6, fill=sample_id.x)) +
+  geom_violin(trim=FALSE, colour="black") +
+  labs(x="sample_id", y = "ADT CLR detection") +
+  scale_fill_manual(values = rev(sample_cols)) + theme_classic() +
+  theme(axis.text = element_text(size=14))
+
+ggsave("figure_S1/ex0003_rps6_rna_violin.pdf", width = 6, height = 4, dpi=800)
+
+
+ggplot(combined_obsm_df_rp6, aes(sample_id.x, pS6_S240_S244_2, fill=sample_id.x)) +
+  geom_violin(trim=FALSE, colour="black") +
+  labs(x="sample_id", y = "ADT CLR detection") +
+  scale_fill_manual(values = rev(sample_cols)) + theme_classic() +
+  theme(axis.text = element_text(size=14))
+
+ggsave("figure_S1/ex0003_pS6_rna_violin.pdf", width = 6, height = 4, dpi=800)
+
+```
+
+```{r}
+
+# Comparing pRb  in casp low cells
+combined_obsm_df_rb <-   combined_obsm_df %>%  
+                            filter(casp3_status == "cCasp3 low") %>% 
+                            select(sample_id.x, pRB_S807_811_v1, RB1)
+
+ggplot(combined_obsm_df_rb, aes(sample_id.x, RB1, fill=sample_id.x)) +
+  geom_violin(trim=FALSE, colour="black") +
+  labs(x="sample_id", y = "ADT CLR detection") +
+  scale_fill_manual(values = rev(sample_cols)) + theme_classic() +
+  theme(axis.text = element_text(size=14))
+
+ggsave("figure_S1/ex0003_RB1_rna_violin.pdf", width = 6, height = 4, dpi=800)
+
+
+ggplot(combined_obsm_df_rb, aes(sample_id.x, pRB_S807_811_v1, fill=sample_id.x)) +
+  geom_violin(trim=FALSE, colour="black") +
+  labs(x="sample_id", y = "ADT CLR detection") +
+  scale_fill_manual(values = rev(sample_cols)) + theme_classic() +
+  theme(axis.text = element_text(size=14))
+
+ggsave("figure_S1/ex0003_pRb_rna_violin.pdf", width = 6, height = 4, dpi=800)
+
+```
+
+
+
+
+
+```{r}
+
+# Early EGF response gene signature in cCasp3 low
+combined_obsm_df_amit <-   combined_obsm_df %>%  
+                            filter(casp3_status == "cCasp3 low") %>%
+                            select(sample_id.x, Amit_Nat_Gen_2007)
+
+
+ggplot(combined_obsm_df_amit, aes(sample_id.x, Amit_Nat_Gen_2007, fill=sample_id.x)) +
+  geom_violin(trim=FALSE, colour="black") +
+  labs(x="sample_id", y = "Early EGF gene signature") +
+  scale_fill_manual(values = rev(sample_cols)) + theme_classic() +
+  theme(axis.text = element_text(size=14)) +
+  geom_hline(yintercept = 0, linetype = "dashed", size = 0.75)
+
+
+ggsave("figure_S1/ex0003_amit_egf_violin.pdf", width = 6, height = 4, dpi=800)
+
+# t test
+pairwise.t.test(combined_obsm_df_amit$Amit_Nat_Gen_2007, combined_obsm_df_amit$sample_id.x)
+
+```
+
+```{r}
+
+# Export cC3 low cells
+write_csv(casp_low_df, "data/cC3_low_adt_df.csv")
+
+```
+
