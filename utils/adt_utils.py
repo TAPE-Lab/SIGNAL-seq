@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 import scprep 
+import biomart
 
 # Perform EMD on specifed control condition
 def calculate_emd(emd_data, control_obs, control_condition):
@@ -63,6 +64,34 @@ def calculate_emd(emd_data, control_obs, control_condition):
     assert not adt_signed_emds.isna().values.any()
 
     return(adt_signed_emds)
+
+#### Gene conversion utils
+
+def convert_ensg_to_gene_names():
+    
+    # Set up connection to server                                               
+    server = biomart.BiomartServer('www.ensembl.org/biomart/martservice')         
+    mart = server.datasets['hsapiens_gene_ensembl'] 
+
+    # List the types of data we want                                            
+    attributes = ['ensembl_gene_id', 'hgnc_symbol']
+    
+    # Get the mapping between the attributes                                    
+    response = mart.search({'attributes': attributes})                          
+    data = response.raw.data.decode('ascii')                                    
+                                                                                
+    ensembl_to_genesymbol = {}                                                  
+    # Store the data in a dict                                                  
+    for line in data.splitlines():                                              
+        line = line.split('\t')  
+                                                       
+        #  Entries are in the same order as in the `attributes` variable
+        transcript_id = line[0]                                                 
+        gene_symbol = line[1]                                                                                                 
+                                                                                
+        ensembl_to_genesymbol[transcript_id] = gene_symbol                      
+                                                                                
+    return ensembl_to_genesymbol
 
 
 #### ADT barcode merging functions for SPLiT-seq
